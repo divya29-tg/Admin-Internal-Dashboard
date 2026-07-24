@@ -1,0 +1,11 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`LoginPage > matches snapshot 1`] = `
+<DocumentFragment>
+  <div
+    data-testid="login-form-mock"
+  >
+    Mocked LoginForm
+  </div>
+</DocumentFragment>
+`;
