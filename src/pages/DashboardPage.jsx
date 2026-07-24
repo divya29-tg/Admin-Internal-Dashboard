@@ -15,6 +15,7 @@ const DashboardPage = () => {
     totalDids,
     activeUsers,
     iosMonthly,
+    iosRange,
     androidMonthly,
     androidRatings,
     filterType,
@@ -83,6 +84,7 @@ const DashboardPage = () => {
             combinedMonthly={monthlyDownloads}
             androidMonthly={androidMonthly}
             iosMonthly={iosMonthly}
+            iosRange={iosRange}
             isLoading={isLoading}
           />
 
@@ -99,3 +101,4 @@ const DashboardPage = () => {
 };
 
 export default DashboardPage;
+

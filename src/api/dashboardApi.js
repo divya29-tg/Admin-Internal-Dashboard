@@ -195,9 +195,12 @@ export const fetchActiveUsers = async () => {
 // Daily snapshots of rolling active-user counts. `range` selects which
 // rolling window each snapshot represents: 'daily' (DAU), 'weekly' (WAU), or
 // 'monthly' (MAU).
-export const fetchActiveUsersHistory = async (range) => {
+export const fetchActiveUsersHistory = async (range, params = {}) => {
   try {
-    const response = await axios.get(`${ACTIVE_USERS_ENDPOINT}/history`, { params: { range }, timeout: API_TIMEOUT_MS });
+    const response = await axios.get(`${ACTIVE_USERS_ENDPOINT}/history`, {
+      params: { range, ...params },
+      timeout: API_TIMEOUT_MS,
+    });
 
     if (!response.data?.success) {
       return [];

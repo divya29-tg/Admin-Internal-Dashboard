@@ -27,8 +27,8 @@ const HistoricalBreakdownTable = ({ androidMonthly, iosRange, totalDownloadsMeta
   const androidByDate = androidMonthly?.byDate || {};
   const androidDailyRows = Object.entries(androidByDate).sort((a, b) => b[0].localeCompare(a[0]));
 
-  // Tab 1: iOS Range Days Breakdown
-  const iosDays = iosRange?.days || [];
+  // Tab 1: iOS Range Days Breakdown (Sorted reverse-chronologically by date)
+  const iosDays = [...(iosRange?.days || [])].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
 
   // Tab 2: iOS Ground Truth Monthly History
   const iosMonthlyHistory = totalDownloadsMeta?.iosBreakdown?.monthly || [];
@@ -75,7 +75,19 @@ const HistoricalBreakdownTable = ({ androidMonthly, iosRange, totalDownloadsMeta
           </Tabs>
         </Box>
 
-        <TableContainer component={Paper} sx={{ backgroundColor: 'transparent', boxShadow: 'none', maxHeight: 380 }}>
+        <TableContainer
+          component={Paper}
+          sx={{
+            backgroundColor: 'transparent',
+            boxShadow: 'none',
+            maxHeight: 380,
+            overflowY: 'auto',
+            '&::-webkit-scrollbar': { width: '6px' },
+            '&::-webkit-scrollbar-track': { background: 'rgba(255, 255, 255, 0.03)', borderRadius: '3px' },
+            '&::-webkit-scrollbar-thumb': { background: 'rgba(255, 255, 255, 0.2)', borderRadius: '3px' },
+            '&::-webkit-scrollbar-thumb:hover': { background: 'rgba(255, 255, 255, 0.4)' },
+          }}
+        >
           <Table stickyHeader size="small">
             <TableHead>
               <TableRow sx={{ '& th': { backgroundColor: '#0f172a', color: '#94a3b8', fontWeight: 700, borderBottom: '1px solid rgba(255, 255, 255, 0.08)' } }}>
@@ -83,16 +95,13 @@ const HistoricalBreakdownTable = ({ androidMonthly, iosRange, totalDownloadsMeta
                   <>
                     <TableCell>Date</TableCell>
                     <TableCell align="right">Android Downloads</TableCell>
-                    <TableCell align="center">Package</TableCell>
                   </>
                 )}
                 {activeTab === 1 && (
                   <>
                     <TableCell>Date</TableCell>
-                    <TableCell align="center">Status</TableCell>
                     <TableCell align="right">iOS Downloads</TableCell>
                     <TableCell>Countries</TableCell>
-                    <TableCell>App Bundles</TableCell>
                   </>
                 )}
                 {activeTab === 2 && (
@@ -110,7 +119,7 @@ const HistoricalBreakdownTable = ({ androidMonthly, iosRange, totalDownloadsMeta
               {activeTab === 0 && (
                 androidDailyRows.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={3} align="center" sx={{ color: '#64748b', py: 3 }}>
+                    <TableCell colSpan={2} align="center" sx={{ color: '#64748b', py: 3 }}>
                       No Android daily log records found
                     </TableCell>
                   </TableRow>
@@ -121,9 +130,6 @@ const HistoricalBreakdownTable = ({ androidMonthly, iosRange, totalDownloadsMeta
                       <TableCell align="right" sx={{ fontWeight: 700, color: '#818cf8' }}>
                         {count.toLocaleString()}
                       </TableCell>
-                      <TableCell align="center">
-                        <Chip label={androidMonthly?.package || 'com.trustgrid.journeys'} size="small" sx={{ backgroundColor: 'rgba(255, 255, 255, 0.05)', color: '#94a3b8', fontSize: '0.75rem' }} />
-                      </TableCell>
                     </TableRow>
                   ))
                 )
@@ -133,35 +139,21 @@ const HistoricalBreakdownTable = ({ androidMonthly, iosRange, totalDownloadsMeta
               {activeTab === 1 && (
                 iosDays.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={5} align="center" sx={{ color: '#64748b', py: 3 }}>
+                    <TableCell colSpan={3} align="center" sx={{ color: '#64748b', py: 3 }}>
                       No iOS range daily log records found
                     </TableCell>
                   </TableRow>
                 ) : (
                   iosDays.map((day) => {
                     const countryList = Object.entries(day.byCountry || {}).map(([c, count]) => `${c}: ${count}`).join(', ');
-                    const appList = Object.entries(day.byApp || {}).map(([app, count]) => `${app}: ${count}`).join(', ');
 
                     return (
                       <TableRow key={day.date} sx={{ '& td': { borderBottom: '1px solid rgba(255, 255, 255, 0.04)', color: '#e2e8f0' } }}>
                         <TableCell sx={{ fontWeight: 600 }}>{day.date}</TableCell>
-                        <TableCell align="center">
-                          <Chip
-                            label={day.found !== false ? 'Found' : 'Not Found'}
-                            size="small"
-                            sx={{
-                              backgroundColor: day.found !== false ? '#10b98122' : 'rgba(255, 255, 255, 0.05)',
-                              color: day.found !== false ? '#10b981' : '#64748b',
-                              fontWeight: 700,
-                              fontSize: '0.75rem',
-                            }}
-                          />
-                        </TableCell>
                         <TableCell align="right" sx={{ fontWeight: 700, color: '#f43f5e' }}>
                           {(day.total || 0).toLocaleString()}
                         </TableCell>
                         <TableCell sx={{ color: '#94a3b8', fontSize: '0.85rem' }}>{countryList || '-'}</TableCell>
-                        <TableCell sx={{ color: '#94a3b8', fontSize: '0.85rem', fontFamily: 'monospace' }}>{appList || '-'}</TableCell>
                       </TableRow>
                     );
                   })

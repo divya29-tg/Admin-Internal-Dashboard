@@ -1,5 +1,22 @@
-import React, { useMemo } from 'react';
-import { Card, CardContent, Typography, Box, Grid, LinearProgress, Chip } from '@mui/material';
+import React, { useMemo, useState } from 'react';
+import {
+  Card,
+  CardContent,
+  Typography,
+  Box,
+  Grid,
+  LinearProgress,
+  Chip,
+  Tabs,
+  Tab,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Paper,
+} from '@mui/material';
 import { Public as PublicIcon, Android as PhoneAndroidIcon, Apple as AppleIcon } from '@mui/icons-material';
 
 const COUNTRY_NAMES = {
@@ -25,7 +42,7 @@ const CountryList = ({ byCountry = {}, color = '#3b82f6' }) => {
 
   if (sortedEntries.length === 0) {
     return (
-      <Typography variant="body2" sx={{ color: '#64748b', py: 2, textAlign: 'center' }}>
+      <Typography variant="body2" sx={{ color: '#64748b', py: 3, textAlign: 'center' }}>
         No country breakdown data available
       </Typography>
     );
@@ -38,23 +55,13 @@ const CountryList = ({ byCountry = {}, color = '#3b82f6' }) => {
       gap={1.5}
       mt={1}
       sx={{
-        maxHeight: 280,
+        maxHeight: 260,
         overflowY: 'auto',
         pr: 1,
-        '&::-webkit-scrollbar': {
-          width: '5px',
-        },
-        '&::-webkit-scrollbar-track': {
-          background: 'rgba(255, 255, 255, 0.03)',
-          borderRadius: '3px',
-        },
-        '&::-webkit-scrollbar-thumb': {
-          background: 'rgba(255, 255, 255, 0.2)',
-          borderRadius: '3px',
-        },
-        '&::-webkit-scrollbar-thumb:hover': {
-          background: 'rgba(255, 255, 255, 0.4)',
-        },
+        '&::-webkit-scrollbar': { width: '5px' },
+        '&::-webkit-scrollbar-track': { background: 'rgba(255, 255, 255, 0.03)', borderRadius: '3px' },
+        '&::-webkit-scrollbar-thumb': { background: 'rgba(255, 255, 255, 0.2)', borderRadius: '3px' },
+        '&::-webkit-scrollbar-thumb:hover': { background: 'rgba(255, 255, 255, 0.4)' },
       }}
     >
       {sortedEntries.map(([code, count]) => {
@@ -104,7 +111,111 @@ const CountryList = ({ byCountry = {}, color = '#3b82f6' }) => {
   );
 };
 
-const GeographicBreakdown = ({ combinedMonthly, androidMonthly, iosMonthly, isLoading }) => {
+const AndroidDailyLogsTable = ({ androidMonthly }) => {
+  const androidByDate = androidMonthly?.byDate || {};
+  const androidDailyRows = Object.entries(androidByDate).sort((a, b) => b[0].localeCompare(a[0]));
+
+  if (androidDailyRows.length === 0) {
+    return (
+      <Typography variant="body2" sx={{ color: '#64748b', py: 3, textAlign: 'center' }}>
+        No Android daily logs found for this period
+      </Typography>
+    );
+  }
+
+  return (
+    <TableContainer
+      component={Paper}
+      sx={{
+        backgroundColor: 'transparent',
+        boxShadow: 'none',
+        maxHeight: 260,
+        overflowY: 'auto',
+        mt: 1,
+        '&::-webkit-scrollbar': { width: '5px' },
+        '&::-webkit-scrollbar-track': { background: 'rgba(255, 255, 255, 0.03)', borderRadius: '3px' },
+        '&::-webkit-scrollbar-thumb': { background: 'rgba(255, 255, 255, 0.2)', borderRadius: '3px' },
+      }}
+    >
+      <Table stickyHeader size="small">
+        <TableHead>
+          <TableRow sx={{ '& th': { backgroundColor: '#0f172a', color: '#94a3b8', fontWeight: 700, borderBottom: '1px solid rgba(255, 255, 255, 0.08)' } }}>
+            <TableCell>Date</TableCell>
+            <TableCell align="right">Downloads</TableCell>
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {androidDailyRows.map(([dateStr, count]) => (
+            <TableRow key={dateStr} sx={{ '& td': { borderBottom: '1px solid rgba(255, 255, 255, 0.04)', color: '#e2e8f0' } }}>
+              <TableCell sx={{ fontWeight: 600, fontSize: '0.85rem' }}>{dateStr}</TableCell>
+              <TableCell align="right" sx={{ fontWeight: 700, color: '#818cf8', fontSize: '0.85rem' }}>
+                {count.toLocaleString()}
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </TableContainer>
+  );
+};
+
+const IosDailyLogsTable = ({ iosRange }) => {
+  const iosDays = [...(iosRange?.days || [])].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+
+  if (iosDays.length === 0) {
+    return (
+      <Typography variant="body2" sx={{ color: '#64748b', py: 3, textAlign: 'center' }}>
+        No iOS daily logs found for this period
+      </Typography>
+    );
+  }
+
+  return (
+    <TableContainer
+      component={Paper}
+      sx={{
+        backgroundColor: 'transparent',
+        boxShadow: 'none',
+        maxHeight: 260,
+        overflowY: 'auto',
+        mt: 1,
+        '&::-webkit-scrollbar': { width: '5px' },
+        '&::-webkit-scrollbar-track': { background: 'rgba(255, 255, 255, 0.03)', borderRadius: '3px' },
+        '&::-webkit-scrollbar-thumb': { background: 'rgba(255, 255, 255, 0.2)', borderRadius: '3px' },
+      }}
+    >
+      <Table stickyHeader size="small">
+        <TableHead>
+          <TableRow sx={{ '& th': { backgroundColor: '#0f172a', color: '#94a3b8', fontWeight: 700, borderBottom: '1px solid rgba(255, 255, 255, 0.08)' } }}>
+            <TableCell>Date</TableCell>
+            <TableCell align="right">Downloads</TableCell>
+            <TableCell>Countries</TableCell>
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {iosDays.map((day) => {
+            const countryList = Object.entries(day.byCountry || {}).map(([c, count]) => `${c}: ${count}`).join(', ');
+
+            return (
+              <TableRow key={day.date} sx={{ '& td': { borderBottom: '1px solid rgba(255, 255, 255, 0.04)', color: '#e2e8f0' } }}>
+                <TableCell sx={{ fontWeight: 600, fontSize: '0.85rem' }}>{day.date}</TableCell>
+                <TableCell align="right" sx={{ fontWeight: 700, color: '#f43f5e', fontSize: '0.85rem' }}>
+                  {(day.total || 0).toLocaleString()}
+                </TableCell>
+                <TableCell sx={{ color: '#94a3b8', fontSize: '0.8rem' }}>{countryList || '-'}</TableCell>
+              </TableRow>
+            );
+          })}
+        </TableBody>
+      </Table>
+    </TableContainer>
+  );
+};
+
+const GeographicBreakdown = ({ combinedMonthly, androidMonthly, iosMonthly, iosRange, isLoading }) => {
+  const [androidTab, setAndroidTab] = useState(0); // 0: Date Logs, 1: Countries
+  const [iosTab, setIosTab] = useState(0); // 0: Date Logs, 1: Countries
+
   const combinedCountries = combinedMonthly?.byCountry || {};
   const androidCountries = androidMonthly?.byCountry || {};
   const iosCountries = iosMonthly?.byCountry || {};
@@ -112,10 +223,11 @@ const GeographicBreakdown = ({ combinedMonthly, androidMonthly, iosMonthly, isLo
   return (
     <Box mb={4}>
       <Typography variant="h6" sx={{ color: '#f8fafc', fontWeight: 700, mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
-        <PublicIcon sx={{ color: '#3b82f6' }} /> Geographic Distribution (By Country)
+        <PublicIcon sx={{ color: '#3b82f6' }} /> Platform & Geographic Breakdown
       </Typography>
 
       <Grid container spacing={3} alignItems="stretch">
+        {/* Combined Downloads */}
         <Grid item xs={12} md={4} sx={{ display: 'flex' }}>
           <Card
             sx={{
@@ -139,6 +251,7 @@ const GeographicBreakdown = ({ combinedMonthly, androidMonthly, iosMonthly, isLo
           </Card>
         </Grid>
 
+        {/* Android Downloads Card with Date Logs */}
         <Grid item xs={12} md={4} sx={{ display: 'flex' }}>
           <Card
             sx={{
@@ -151,17 +264,18 @@ const GeographicBreakdown = ({ combinedMonthly, androidMonthly, iosMonthly, isLo
             }}
           >
             <CardContent sx={{ p: 3, flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
-              <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
-                <Typography variant="subtitle1" sx={{ color: '#f8fafc', fontWeight: 700 }}>
-                  Android Downloads
+              <Box display="flex" justifyContent="space-between" alignItems="center" mb={1}>
+                <Typography variant="subtitle1" sx={{ color: '#f8fafc', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <PhoneAndroidIcon sx={{ color: '#818cf8' }} /> Android Downloads
                 </Typography>
-                <PhoneAndroidIcon sx={{ color: '#818cf8' }} />
               </Box>
-              <CountryList byCountry={androidCountries} color="#818cf8" />
+
+              <AndroidDailyLogsTable androidMonthly={androidMonthly} />
             </CardContent>
           </Card>
         </Grid>
 
+        {/* iOS Downloads Card with Date Logs & Countries */}
         <Grid item xs={12} md={4} sx={{ display: 'flex' }}>
           <Card
             sx={{
@@ -174,13 +288,13 @@ const GeographicBreakdown = ({ combinedMonthly, androidMonthly, iosMonthly, isLo
             }}
           >
             <CardContent sx={{ p: 3, flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
-              <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
-                <Typography variant="subtitle1" sx={{ color: '#f8fafc', fontWeight: 700 }}>
-                  iOS Downloads
+              <Box display="flex" justifyContent="space-between" alignItems="center" mb={1}>
+                <Typography variant="subtitle1" sx={{ color: '#f8fafc', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <AppleIcon sx={{ color: '#f43f5e' }} /> iOS Downloads
                 </Typography>
-                <AppleIcon sx={{ color: '#f43f5e' }} />
               </Box>
-              <CountryList byCountry={iosCountries} color="#f43f5e" />
+
+              <IosDailyLogsTable iosRange={iosRange} />
             </CardContent>
           </Card>
         </Grid>
