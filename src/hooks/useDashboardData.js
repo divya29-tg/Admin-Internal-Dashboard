@@ -15,8 +15,10 @@ import {
   getLatestTotalUsers,
   getMonthsBetweenDates,
 } from '../utils/dashboardUtils.js';
+import { getCachedApiResponse } from '../utils/cacheService.js';
 import { getPageVisibility, onVisibilityChange } from '../utils/pageVisibility.js';
 import { DEFAULT_FILTER_TYPE, POLL_INTERVAL_MS } from '../constants/dashboard.constants.js';
+import { ACTIVE_USERS_ENDPOINT, DL_TRACKER_BASE_URL, TOTAL_DIDS_ENDPOINT } from '../config/apiConfig.js';
 
 export const useDashboardData = (token) => {
   const [filterType, setFilterType] = useState(DEFAULT_FILTER_TYPE);
@@ -68,6 +70,143 @@ export const useDashboardData = (token) => {
       mauSubtitle: 'Users active in the last 30 days',
     };
   }, [activeUsersBase, activeUsersHistory]);
+
+  /**
+   * Instantly hydrates React state from LocalStorage cache if available for a given filter.
+   * Enables instant UI rendering before background network requests complete.
+   */
+  const hydrateFromCache = useCallback((targetFilterType) => {
+    let hasCachedData = false;
+
+    // 1. Hydrate global ground truth totals
+    const cachedTotals = getCachedApiResponse(`${DL_TRACKER_BASE_URL}/combined/stats/total`, {});
+    if (cachedTotals && cachedTotals.total) {
+      setBaseTotalDownloads(cachedTotals);
+      hasCachedData = true;
+    }
+
+    const cachedDids = getCachedApiResponse(TOTAL_DIDS_ENDPOINT, {});
+    if (cachedDids) {
+      setBaseTotalDids(cachedDids);
+      hasCachedData = true;
+    }
+
+    const cachedActiveBase = getCachedApiResponse(ACTIVE_USERS_ENDPOINT, {});
+    if (cachedActiveBase) {
+      setActiveUsersBase(cachedActiveBase);
+      hasCachedData = true;
+    }
+
+    const cachedDailyHistory = getCachedApiResponse(`${ACTIVE_USERS_ENDPOINT}/history`, { range: 'daily' });
+    const cachedWeeklyHistory = getCachedApiResponse(`${ACTIVE_USERS_ENDPOINT}/history`, { range: 'weekly' });
+    const cachedMonthlyHistory = getCachedApiResponse(`${ACTIVE_USERS_ENDPOINT}/history`, { range: 'monthly' });
+    if (cachedDailyHistory || cachedWeeklyHistory || cachedMonthlyHistory) {
+      setActiveUsersHistory({
+        daily: cachedDailyHistory || [],
+        weekly: cachedWeeklyHistory || [],
+        monthly: cachedMonthlyHistory || [],
+      });
+      hasCachedData = true;
+    }
+
+    // 2. Hydrate filter-dependent download statistics
+    const { from, to } = getExactDateRangeForFilter(targetFilterType);
+    const targetMonth = getCurrentMonth();
+    const monthsNeeded = getMonthsBetweenDates(from, to);
+
+    const cachedAndroidMonths = monthsNeeded
+      .map((m) => getCachedApiResponse(`${DL_TRACKER_BASE_URL}/android/downloads`, { month: m }))
+      .filter(Boolean);
+
+    const cachedIosRange = getCachedApiResponse(`${DL_TRACKER_BASE_URL}/ios/downloads/range`, { from, to });
+    const cachedAndroidRatings = getCachedApiResponse(`${DL_TRACKER_BASE_URL}/android/ratings`, { month: targetMonth });
+
+    if (cachedAndroidRatings) {
+      setAndroidRatings(cachedAndroidRatings);
+    }
+
+    if (cachedAndroidMonths.length > 0 || cachedIosRange) {
+      const combinedAndroidByDate = {};
+      const androidByCountryCombined = {};
+      let pkgName = 'com.trustgrid.journeys';
+
+      cachedAndroidMonths.forEach((androidRes) => {
+        if (!androidRes) return;
+        if (androidRes.package) pkgName = androidRes.package;
+
+        if (androidRes.byDate) {
+          Object.assign(combinedAndroidByDate, androidRes.byDate);
+        }
+
+        if (androidRes.byCountry) {
+          Object.entries(androidRes.byCountry).forEach(([country, count]) => {
+            androidByCountryCombined[country] = (androidByCountryCombined[country] || 0) + (count || 0);
+          });
+        }
+      });
+
+      const { total: androidPeriodTotal, filteredByDate: androidFilteredByDate } = filterByDateMap(
+        combinedAndroidByDate,
+        from,
+        to
+      );
+
+      let iosPeriodTotal = 0;
+      let iosRangeData = { grandTotal: 0, days: [] };
+      const iosByCountryCombined = {};
+
+      if (cachedIosRange) {
+        iosRangeData = cachedIosRange;
+        const days = iosRangeData.days || [];
+        const filteredDays = days.filter((d) => d.date >= from && d.date <= to);
+        iosRangeData = { ...iosRangeData, days: filteredDays };
+
+        filteredDays.forEach((d) => {
+          iosPeriodTotal += d.total || 0;
+          Object.entries(d.byCountry || {}).forEach(([c, count]) => {
+            iosByCountryCombined[c] = (iosByCountryCombined[c] || 0) + (count || 0);
+          });
+        });
+      }
+
+      const combinedTotal = androidPeriodTotal + iosPeriodTotal;
+      const periodLabel = from === to ? from : `${from} to ${to}`;
+
+      const combinedByCountry = { ...androidByCountryCombined };
+      Object.entries(iosByCountryCombined).forEach(([c, count]) => {
+        combinedByCountry[c] = (combinedByCountry[c] || 0) + (count || 0);
+      });
+
+      const periodDownloadsVal = {
+        total: combinedTotal,
+        android: androidPeriodTotal,
+        ios: iosPeriodTotal,
+        period: periodLabel,
+        byCountry: combinedByCountry,
+        androidDetails: {
+          total: androidPeriodTotal,
+          byDate: androidFilteredByDate,
+          byCountry: androidByCountryCombined,
+          package: pkgName,
+        },
+        iosDetails: iosRangeData,
+      };
+
+      setMonthlyDownloads(periodDownloadsVal);
+      setIosRange(iosRangeData);
+      setIosMonthly(iosRangeData);
+      setAndroidMonthly({
+        total: androidPeriodTotal,
+        byDate: androidFilteredByDate,
+        byCountry: androidByCountryCombined,
+        package: pkgName,
+      });
+
+      hasCachedData = true;
+    }
+
+    return hasCachedData;
+  }, []);
 
   const fetchTotalDownloadsStats = useCallback(async () => {
     try {
@@ -243,7 +382,15 @@ export const useDashboardData = (token) => {
     hasFetchedInitialRef.current = true;
 
     const loadInitialData = async () => {
-      setIsLoading(true);
+      // 1. Immediately render cached data if available
+      const hasCache = hydrateFromCache(filterType);
+      if (hasCache) {
+        setIsLoading(false);
+      } else {
+        setIsLoading(true);
+      }
+
+      // 2. Fetch fresh data in the background
       try {
         await Promise.allSettled([
           fetchTotalDownloadsStats(),
@@ -260,7 +407,16 @@ export const useDashboardData = (token) => {
     };
 
     loadInitialData();
-  }, [token, fetchTotalDownloadsStats, fetchTotalDidsStats, fetchMonthlyDownloadsStats, fetchActiveUserStats, fetchActiveUsersHistoryStats]);
+  }, [
+    token,
+    filterType,
+    hydrateFromCache,
+    fetchTotalDownloadsStats,
+    fetchTotalDidsStats,
+    fetchMonthlyDownloadsStats,
+    fetchActiveUserStats,
+    fetchActiveUsersHistoryStats,
+  ]);
 
   // Handle filter changes (re-fetch date-dependent stats when filterType changes)
   useEffect(() => {
@@ -268,7 +424,14 @@ export const useDashboardData = (token) => {
       isFirstRenderRef.current = false;
       return;
     }
-    setIsFilterLoading(true);
+
+    // 1. Hydrate cached data immediately for the newly selected filter
+    const hasCache = hydrateFromCache(filterType);
+    if (!hasCache) {
+      setIsFilterLoading(true);
+    }
+
+    // 2. Background revalidation for the new filter
     Promise.allSettled([
       fetchMonthlyDownloadsStats(),
       fetchActiveUserStats(),
@@ -276,7 +439,7 @@ export const useDashboardData = (token) => {
     ]).finally(() => {
       setIsFilterLoading(false);
     });
-  }, [filterType, fetchMonthlyDownloadsStats, fetchActiveUserStats, fetchActiveUsersHistoryStats]);
+  }, [filterType, hydrateFromCache, fetchMonthlyDownloadsStats, fetchActiveUserStats, fetchActiveUsersHistoryStats]);
 
   useEffect(() => {
     const handleVisibility = () => {
@@ -325,4 +488,3 @@ export const useDashboardData = (token) => {
     refreshDashboard,
   };
 };
-
