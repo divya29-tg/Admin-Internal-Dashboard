@@ -20,6 +20,8 @@ const DashboardPage = () => {
     androidRatings,
     filterType,
     setFilterType,
+    selectedActiveDate,
+    setSelectedActiveDate,
     isLoading,
     isFilterLoading,
     isRefreshing,
@@ -78,6 +80,8 @@ const DashboardPage = () => {
             totalDids={totalDids}
             activeUsers={activeUsers}
             isLoading={isLoading}
+            selectedActiveDate={selectedActiveDate}
+            onSelectActiveDate={setSelectedActiveDate}
           />
 
           <GeographicBreakdown
@@ -101,4 +105,3 @@ const DashboardPage = () => {
 };
 
 export default DashboardPage;
-
