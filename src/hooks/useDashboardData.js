@@ -64,6 +64,17 @@ const extractSnapshotCount = (item, primaryKey) => {
 
 export const useDashboardData = (token) => {
   const [filterType, setFilterType] = useState(DEFAULT_FILTER_TYPE);
+  const filterTypeRef = useRef(filterType);
+
+  useEffect(() => {
+    filterTypeRef.current = filterType;
+  }, [filterType]);
+
+  const handleSetFilterType = useCallback((newFilter) => {
+    filterTypeRef.current = newFilter;
+    setFilterType(newFilter);
+  }, []);
+
   const [selectedActiveDate, setSelectedActiveDate] = useState('');
   const [baseTotalDownloads, setBaseTotalDownloads] = useState({ total: 3313, android: 2727, ios: 586 });
   const [monthlyDownloads, setMonthlyDownloads] = useState({ total: 0, android: 0, ios: 0, period: null });
@@ -210,6 +221,11 @@ export const useDashboardData = (token) => {
       hasCachedData = true;
     }
 
+    // If active filter changed before hydration ran, skip filter-dependent hydration
+    if (filterTypeRef.current !== targetFilterType) {
+      return hasCachedData;
+    }
+
     // 2. Hydrate filter-dependent download statistics
     const { from, to } = getExactDateRangeForFilter(targetFilterType);
     const targetMonth = getCurrentMonth();
@@ -301,15 +317,17 @@ export const useDashboardData = (token) => {
         iosDetails: iosRangeData,
       };
 
-      setMonthlyDownloads(periodDownloadsVal);
-      setIosRange(iosRangeData);
-      setIosMonthly(iosRangeData);
-      setAndroidMonthly({
-        total: androidPeriodTotal,
-        byDate: androidFilteredByDate,
-        byCountry: androidByCountryCombined,
-        package: pkgName,
-      });
+      if (filterTypeRef.current === targetFilterType) {
+        setMonthlyDownloads(periodDownloadsVal);
+        setIosRange(iosRangeData);
+        setIosMonthly(iosRangeData);
+        setAndroidMonthly({
+          total: androidPeriodTotal,
+          byDate: androidFilteredByDate,
+          byCountry: androidByCountryCombined,
+          package: pkgName,
+        });
+      }
 
       hasCachedData = true;
     }
@@ -335,9 +353,10 @@ export const useDashboardData = (token) => {
     }
   }, []);
 
-  const fetchMonthlyDownloadsStats = useCallback(async () => {
+  const fetchMonthlyDownloadsStats = useCallback(async (targetFilter) => {
+    const activeFilter = targetFilter || filterTypeRef.current;
     try {
-      const { from, to } = getExactDateRangeForFilter(filterType);
+      const { from, to } = getExactDateRangeForFilter(activeFilter);
       const targetMonth = getCurrentMonth();
       const monthsNeeded = getMonthsBetweenDates(from, to);
 
@@ -348,6 +367,11 @@ export const useDashboardData = (token) => {
         fetchIosDownloadsRange(from, to),
         fetchAndroidRatings(targetMonth),
       ]);
+
+      // Guard: Discard response if user changed the filter while fetch was in flight
+      if (filterTypeRef.current !== activeFilter) {
+        return;
+      }
 
       // Process Android data across months and filter by exact dates (from -> to)
       const combinedAndroidByDate = {};
@@ -428,6 +452,11 @@ export const useDashboardData = (token) => {
         iosDetails: iosRangeData,
       };
 
+      // Guard: Discard response if user changed the filter while fetch was in flight
+      if (filterTypeRef.current !== activeFilter) {
+        return;
+      }
+
       setMonthlyDownloads(periodDownloadsVal);
       setIosRange(iosRangeData);
       setIosMonthly(iosRangeData);
@@ -442,7 +471,7 @@ export const useDashboardData = (token) => {
     } catch (error) {
       console.error('[Period Downloads Fetch Error]', error);
     }
-  }, [filterType]);
+  }, []);
 
   const fetchActiveUserStats = useCallback(async () => {
     try {
@@ -471,7 +500,7 @@ export const useDashboardData = (token) => {
       await Promise.allSettled([
         fetchTotalDownloadsStats(),
         fetchTotalDidsStats(),
-        fetchMonthlyDownloadsStats(),
+        fetchMonthlyDownloadsStats(filterTypeRef.current),
         fetchActiveUserStats(),
         fetchActiveUsersHistoryStats(),
       ]);
@@ -495,8 +524,9 @@ export const useDashboardData = (token) => {
     hasFetchedInitialRef.current = true;
 
     const loadInitialData = async () => {
+      const initialFilter = filterTypeRef.current;
       // 1. Immediately render cached data if available
-      const hasCache = hydrateFromCache(filterType);
+      const hasCache = hydrateFromCache(initialFilter);
       if (hasCache) {
         setIsLoading(false);
       } else {
@@ -508,7 +538,7 @@ export const useDashboardData = (token) => {
         await Promise.allSettled([
           fetchTotalDownloadsStats(),
           fetchTotalDidsStats(),
-          fetchMonthlyDownloadsStats(),
+          fetchMonthlyDownloadsStats(initialFilter),
           fetchActiveUserStats(),
           fetchActiveUsersHistoryStats(),
         ]);
@@ -522,7 +552,6 @@ export const useDashboardData = (token) => {
     loadInitialData();
   }, [
     token,
-    filterType,
     hydrateFromCache,
     fetchTotalDownloadsStats,
     fetchTotalDidsStats,
@@ -538,19 +567,23 @@ export const useDashboardData = (token) => {
       return;
     }
 
+    const currentFilter = filterType;
+
     // 1. Hydrate cached data immediately for the newly selected filter
-    const hasCache = hydrateFromCache(filterType);
+    const hasCache = hydrateFromCache(currentFilter);
     if (!hasCache) {
       setIsFilterLoading(true);
     }
 
     // 2. Background revalidation for the new filter
     Promise.allSettled([
-      fetchMonthlyDownloadsStats(),
+      fetchMonthlyDownloadsStats(currentFilter),
       fetchActiveUserStats(),
       fetchActiveUsersHistoryStats(),
     ]).finally(() => {
-      setIsFilterLoading(false);
+      if (filterTypeRef.current === currentFilter) {
+        setIsFilterLoading(false);
+      }
     });
   }, [filterType, hydrateFromCache, fetchMonthlyDownloadsStats, fetchActiveUserStats, fetchActiveUsersHistoryStats]);
 
@@ -575,7 +608,7 @@ export const useDashboardData = (token) => {
     const interval = setInterval(() => {
       fetchTotalDownloadsStats();
       fetchTotalDidsStats();
-      fetchMonthlyDownloadsStats();
+      fetchMonthlyDownloadsStats(filterTypeRef.current);
       fetchActiveUserStats();
       fetchActiveUsersHistoryStats();
     }, POLL_INTERVAL_MS);
@@ -594,7 +627,7 @@ export const useDashboardData = (token) => {
     androidMonthly,
     androidRatings,
     filterType,
-    setFilterType,
+    setFilterType: handleSetFilterType,
     selectedActiveDate,
     setSelectedActiveDate,
     isLoading,
