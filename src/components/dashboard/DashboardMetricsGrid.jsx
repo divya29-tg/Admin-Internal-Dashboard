@@ -16,7 +16,7 @@ import {
   CloudDownload as DownloadIcon,
   People as UsersIcon,
   TrendingUp as TrendUpIcon,
-  CalendarMonth as MonthIcon,
+  AccessTime as ClockIcon,
   Fingerprint as DidIcon,
   CheckCircle as ActiveCheckIcon,
   ChevronLeft as LeftArrowIcon,
@@ -518,10 +518,10 @@ const DashboardMetricsGrid = ({
         </Grid>
         <Grid item xs={12} md={3} sx={{ display: 'flex' }}>
           <KPICard
-            title="Period Downloads"
+            title="Session Downloads"
             value={monthlyDownloads.total}
-            subtitle={monthlyDownloads.period ? `Period: ${monthlyDownloads.period}` : 'Selected period'}
-            icon={<MonthIcon />}
+            subtitle={monthlyDownloads.period ? `Date Range: ${monthlyDownloads.period}` : 'Selected period'}
+            icon={<ClockIcon />}
             color="#f59e0b"
             androidVal={monthlyDownloads.android}
             iosVal={monthlyDownloads.ios}
