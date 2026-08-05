@@ -220,6 +220,10 @@ const GeographicBreakdown = ({ combinedMonthly, androidMonthly, iosMonthly, iosR
   const androidCountries = androidMonthly?.byCountry || {};
   const iosCountries = iosMonthly?.byCountry || {};
 
+  // Hidden in UI per user request, code retained
+  const HIDE_IN_UI = true;
+  if (HIDE_IN_UI) return null;
+
   return (
     <Box mb={4}>
       <Typography variant="h6" sx={{ color: '#f8fafc', fontWeight: 700, mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
