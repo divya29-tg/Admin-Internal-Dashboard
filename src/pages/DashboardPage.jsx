@@ -14,6 +14,7 @@ const DashboardPage = () => {
     monthlyDownloads,
     totalDids,
     activeUsers,
+    activeUsersHistory,
     iosMonthly,
     iosRange,
     androidMonthly,
@@ -79,6 +80,7 @@ const DashboardPage = () => {
             monthlyDownloads={monthlyDownloads}
             totalDids={totalDids}
             activeUsers={activeUsers}
+            activeUsersHistory={activeUsersHistory}
             isLoading={isLoading}
             selectedActiveDate={selectedActiveDate}
             onSelectActiveDate={setSelectedActiveDate}

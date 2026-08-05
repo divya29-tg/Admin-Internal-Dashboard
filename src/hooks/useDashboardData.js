@@ -165,7 +165,7 @@ export const useDashboardData = (token) => {
         wauRate: wauRateVal,
         totalUsers: targetTotalUsers,
         asOf: selectedActiveDate,
-        mauSubtitle: `Active users on ${selectedActiveDate}`,
+        mauSubtitle: 'Users active in the last 30 days',
       };
     }
 
