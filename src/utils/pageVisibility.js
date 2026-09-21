@@ -8,8 +8,14 @@ export const onVisibilityChange = (callback) => {
     return () => {};
   }
 
-  document.addEventListener('visibilitychange', callback);
+  const handler = () => {
+    if (typeof callback === 'function') {
+      callback(document.visibilityState === 'visible');
+    }
+  };
+
+  document.addEventListener('visibilitychange', handler);
   return () => {
-    document.removeEventListener('visibilitychange', callback);
+    document.removeEventListener('visibilitychange', handler);
   };
 };

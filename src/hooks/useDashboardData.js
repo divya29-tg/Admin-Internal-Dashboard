@@ -76,7 +76,7 @@ export const useDashboardData = (token) => {
   }, []);
 
   const [selectedActiveDate, setSelectedActiveDate] = useState('');
-  const [baseTotalDownloads, setBaseTotalDownloads] = useState({ total: 3313, android: 2727, ios: 586 });
+  const [baseTotalDownloads, setBaseTotalDownloads] = useState({ total: 0, android: 0, ios: 0 });
   const [monthlyDownloads, setMonthlyDownloads] = useState({ total: 0, android: 0, ios: 0, period: null });
   const [baseTotalDids, setBaseTotalDids] = useState(3679);
   const [activeUsersBase, setActiveUsersBase] = useState({
@@ -187,38 +187,41 @@ export const useDashboardData = (token) => {
    * Instantly hydrates React state from LocalStorage cache if available for a given filter.
    * Enables instant UI rendering before background network requests complete.
    */
-  const hydrateFromCache = useCallback((targetFilterType) => {
+  const hydrateFromCache = useCallback((targetFilterType, options = {}) => {
+    const isFilterChangeOnly = options?.isFilterChangeOnly || false;
     let hasCachedData = false;
 
-    // 1. Hydrate global ground truth totals
-    const cachedTotals = getCachedApiResponse(`${DL_TRACKER_BASE_URL}/combined/stats/total`, {});
-    if (cachedTotals && cachedTotals.total) {
-      setBaseTotalDownloads(cachedTotals);
-      hasCachedData = true;
-    }
+    if (!isFilterChangeOnly) {
+      // 1. Hydrate global ground truth totals
+      const cachedTotals = getCachedApiResponse(`${DL_TRACKER_BASE_URL}/combined/stats/total`, {});
+      if (cachedTotals && typeof cachedTotals.total === 'number') {
+        setBaseTotalDownloads(cachedTotals);
+        hasCachedData = true;
+      }
 
-    const cachedDids = getCachedApiResponse(TOTAL_DIDS_ENDPOINT, {});
-    if (cachedDids) {
-      setBaseTotalDids(cachedDids);
-      hasCachedData = true;
-    }
+      const cachedDids = getCachedApiResponse(TOTAL_DIDS_ENDPOINT, {});
+      if (cachedDids) {
+        setBaseTotalDids(cachedDids);
+        hasCachedData = true;
+      }
 
-    const cachedActiveBase = getCachedApiResponse(ACTIVE_USERS_ENDPOINT, {});
-    if (cachedActiveBase) {
-      setActiveUsersBase(cachedActiveBase);
-      hasCachedData = true;
-    }
+      const cachedActiveBase = getCachedApiResponse(ACTIVE_USERS_ENDPOINT, {});
+      if (cachedActiveBase) {
+        setActiveUsersBase(cachedActiveBase);
+        hasCachedData = true;
+      }
 
-    const cachedDailyHistory = getCachedApiResponse(`${ACTIVE_USERS_ENDPOINT}/history`, { range: 'daily' });
-    const cachedWeeklyHistory = getCachedApiResponse(`${ACTIVE_USERS_ENDPOINT}/history`, { range: 'weekly' });
-    const cachedMonthlyHistory = getCachedApiResponse(`${ACTIVE_USERS_ENDPOINT}/history`, { range: 'monthly' });
-    if (cachedDailyHistory || cachedWeeklyHistory || cachedMonthlyHistory) {
-      setActiveUsersHistory({
-        daily: cachedDailyHistory || [],
-        weekly: cachedWeeklyHistory || [],
-        monthly: cachedMonthlyHistory || [],
-      });
-      hasCachedData = true;
+      const cachedDailyHistory = getCachedApiResponse(`${ACTIVE_USERS_ENDPOINT}/history`, { range: 'daily' });
+      const cachedWeeklyHistory = getCachedApiResponse(`${ACTIVE_USERS_ENDPOINT}/history`, { range: 'weekly' });
+      const cachedMonthlyHistory = getCachedApiResponse(`${ACTIVE_USERS_ENDPOINT}/history`, { range: 'monthly' });
+      if (cachedDailyHistory || cachedWeeklyHistory || cachedMonthlyHistory) {
+        setActiveUsersHistory({
+          daily: cachedDailyHistory || [],
+          weekly: cachedWeeklyHistory || [],
+          monthly: cachedMonthlyHistory || [],
+        });
+        hasCachedData = true;
+      }
     }
 
     // If active filter changed before hydration ran, skip filter-dependent hydration
@@ -338,7 +341,7 @@ export const useDashboardData = (token) => {
   const fetchTotalDownloadsStats = useCallback(async () => {
     try {
       const res = await fetchCombinedTotals();
-      if (res && res.total) setBaseTotalDownloads(res);
+      if (res && typeof res.total === 'number') setBaseTotalDownloads(res);
     } catch (error) {
       console.error('[Total Downloads Fetch Error]', error);
     }
@@ -353,20 +356,72 @@ export const useDashboardData = (token) => {
     }
   }, []);
 
-  const fetchMonthlyDownloadsStats = useCallback(async (targetFilter) => {
+  const fetchMonthlyDownloadsStats = useCallback(async (targetFilter, options = {}) => {
     const activeFilter = targetFilter || filterTypeRef.current;
+    const forceRefresh = options?.forceRefresh || false;
     try {
       const { from, to } = getExactDateRangeForFilter(activeFilter);
       const targetMonth = getCurrentMonth();
       const monthsNeeded = getMonthsBetweenDates(from, to);
 
-      // Execute requests in parallel, incorporating dedicated combined range API
-      const [combinedRangeRes, androidResults, iosRangeResult, androidRatingsRes] = await Promise.allSettled([
-        fetchCombinedDownloadsRange(from, to),
-        Promise.all(monthsNeeded.map((m) => fetchAndroidDownloadsMonthly(m))),
-        fetchIosDownloadsRange(from, to),
-        fetchAndroidRatings(targetMonth),
-      ]);
+      // 1. Inspect existing cache
+      const cachedCombinedRange = getCachedApiResponse(`${DL_TRACKER_BASE_URL}/combined/downloads/range`, { from, to });
+      const cachedIosRange = getCachedApiResponse(`${DL_TRACKER_BASE_URL}/ios/downloads/range`, { from, to });
+      const cachedAndroidRatings = getCachedApiResponse(`${DL_TRACKER_BASE_URL}/android/ratings`, { month: targetMonth });
+
+      const cachedAndroidMonthsMap = {};
+      const missingAndroidMonths = [];
+
+      monthsNeeded.forEach((m) => {
+        const cachedM = getCachedApiResponse(`${DL_TRACKER_BASE_URL}/android/downloads`, { month: m });
+        if (cachedM) {
+          cachedAndroidMonthsMap[m] = cachedM;
+        } else {
+          missingAndroidMonths.push(m);
+        }
+      });
+
+      let combinedRangeVal = cachedCombinedRange;
+      let iosRangeVal = cachedIosRange;
+      let androidRatingsVal = cachedAndroidRatings;
+      let androidResultsList = monthsNeeded.map((m) => cachedAndroidMonthsMap[m]);
+
+      const hasAllCached =
+        !forceRefresh &&
+        cachedCombinedRange !== null &&
+        cachedIosRange !== null &&
+        missingAndroidMonths.length === 0;
+
+      // 2. Fetch only endpoints that are missing from cache (or if forceRefresh requested)
+      if (!hasAllCached) {
+        const combinedPromise = forceRefresh || !cachedCombinedRange
+          ? fetchCombinedDownloadsRange(from, to, options)
+          : Promise.resolve(cachedCombinedRange);
+
+        const androidPromise = missingAndroidMonths.length > 0 || forceRefresh
+          ? Promise.all(monthsNeeded.map((m) => fetchAndroidDownloadsMonthly(m, options)))
+          : Promise.resolve(androidResultsList);
+
+        const iosPromise = forceRefresh || !cachedIosRange
+          ? fetchIosDownloadsRange(from, to, options)
+          : Promise.resolve(cachedIosRange);
+
+        const ratingsPromise = forceRefresh || !cachedAndroidRatings
+          ? fetchAndroidRatings(targetMonth, options)
+          : Promise.resolve(cachedAndroidRatings);
+
+        const [combinedRes, androidRes, iosRes, ratingsRes] = await Promise.allSettled([
+          combinedPromise,
+          androidPromise,
+          iosPromise,
+          ratingsPromise,
+        ]);
+
+        if (combinedRes.status === 'fulfilled') combinedRangeVal = combinedRes.value;
+        if (androidRes.status === 'fulfilled' && Array.isArray(androidRes.value)) androidResultsList = androidRes.value;
+        if (iosRes.status === 'fulfilled') iosRangeVal = iosRes.value;
+        if (ratingsRes.status === 'fulfilled') androidRatingsVal = ratingsRes.value;
+      }
 
       // Guard: Discard response if user changed the filter while fetch was in flight
       if (filterTypeRef.current !== activeFilter) {
@@ -377,8 +432,8 @@ export const useDashboardData = (token) => {
       const combinedAndroidByDate = {};
       let pkgName = 'com.trustgrid.journeys';
 
-      if (androidResults.status === 'fulfilled' && Array.isArray(androidResults.value)) {
-        androidResults.value.forEach((androidRes) => {
+      if (Array.isArray(androidResultsList)) {
+        androidResultsList.forEach((androidRes) => {
           if (!androidRes) return;
           if (androidRes.package) pkgName = androidRes.package;
 
@@ -399,8 +454,8 @@ export const useDashboardData = (token) => {
       let iosRangeData = { grandTotal: 0, days: [] };
       const iosByCountryCombined = {};
 
-      if (iosRangeResult.status === 'fulfilled' && iosRangeResult.value) {
-        iosRangeData = iosRangeResult.value;
+      if (iosRangeVal) {
+        iosRangeData = iosRangeVal;
         const days = iosRangeData.days || [];
 
         // Filter days strictly between from and to
@@ -421,13 +476,12 @@ export const useDashboardData = (token) => {
       let combinedByCountry = {};
       let androidByCountryCombined = {};
 
-      if (combinedRangeRes.status === 'fulfilled' && combinedRangeRes.value) {
-        const rangeVal = combinedRangeRes.value;
-        if (rangeVal.byCountry && (androidPeriodTotal > 0 || iosPeriodTotal > 0)) {
-          combinedByCountry = rangeVal.byCountry;
+      if (combinedRangeVal) {
+        if (combinedRangeVal.byCountry && (androidPeriodTotal > 0 || iosPeriodTotal > 0)) {
+          combinedByCountry = combinedRangeVal.byCountry;
         }
-        if (rangeVal.androidDetails?.byCountry && androidPeriodTotal > 0) {
-          androidByCountryCombined = rangeVal.androidDetails.byCountry;
+        if (combinedRangeVal.androidDetails?.byCountry && androidPeriodTotal > 0) {
+          androidByCountryCombined = combinedRangeVal.androidDetails.byCountry;
         }
       }
 
@@ -467,7 +521,7 @@ export const useDashboardData = (token) => {
         package: pkgName,
       });
 
-      if (androidRatingsRes.status === 'fulfilled') setAndroidRatings(androidRatingsRes.value);
+      if (androidRatingsVal) setAndroidRatings(androidRatingsVal);
     } catch (error) {
       console.error('[Period Downloads Fetch Error]', error);
     }
@@ -569,27 +623,25 @@ export const useDashboardData = (token) => {
 
     const currentFilter = filterType;
 
-    // 1. Hydrate cached data immediately for the newly selected filter
-    const hasCache = hydrateFromCache(currentFilter);
+    // 1. Hydrate cached data immediately for the newly selected filter (downloads only)
+    const hasCache = hydrateFromCache(currentFilter, { isFilterChangeOnly: true });
     if (!hasCache) {
       setIsFilterLoading(true);
     }
 
-    // 2. Background revalidation for the new filter
+    // 2. Background revalidation for the new filter (ONLY date-dependent stats)
     Promise.allSettled([
       fetchMonthlyDownloadsStats(currentFilter),
-      fetchActiveUserStats(),
-      fetchActiveUsersHistoryStats(),
     ]).finally(() => {
       if (filterTypeRef.current === currentFilter) {
         setIsFilterLoading(false);
       }
     });
-  }, [filterType, hydrateFromCache, fetchMonthlyDownloadsStats, fetchActiveUserStats, fetchActiveUsersHistoryStats]);
+  }, [filterType, hydrateFromCache, fetchMonthlyDownloadsStats]);
 
   useEffect(() => {
-    const handleVisibility = () => {
-      const visible = getPageVisibility();
+    const handleVisibility = (isVisible) => {
+      const visible = typeof isVisible === 'boolean' ? isVisible : getPageVisibility();
       setIsPageVisible(visible);
 
       if (!prevVisibilityRef.current && visible) {

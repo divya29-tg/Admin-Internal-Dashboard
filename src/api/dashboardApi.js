@@ -15,7 +15,7 @@ export const fetchCombinedTotals = async (options = {}) => {
       const response = await axios.get(endpoint, { timeout: API_TIMEOUT_MS });
 
       return {
-        total: response.data.totalDownloads ?? 0,
+        total: response.data.combinedTotal ?? response.data.totalDownloads ?? response.data.total ?? 0,
         android: response.data.androidDownloads ?? 0,
         ios: response.data.iosDownloads ?? 0,
         meta: response.data._meta || {},
