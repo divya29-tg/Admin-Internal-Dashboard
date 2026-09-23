@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { buildDateRangeParams } from '../utils/dashboardUtils.js';
 import { executeCachedApi } from '../utils/cacheService.js';
-import { ACTIVE_USERS_ENDPOINT, DL_TRACKER_BASE_URL, TOTAL_DIDS_ENDPOINT } from '../config/apiConfig.js';
+import { ACTIVE_USERS_ENDPOINT, DL_TRACKER_BASE_URL, TOTAL_DIDS_ENDPOINT, TOTAL_USERS_ENDPOINT } from '../config/apiConfig.js';
 
 const API_TIMEOUT_MS = 25000;
 
@@ -239,23 +239,44 @@ export const fetchAndroidRatings = async (month, options = {}) => {
 
 export const fetchActiveUsers = async (options = {}) => {
   const endpoint = ACTIVE_USERS_ENDPOINT;
-  return executeCachedApi(
-    endpoint,
-    {},
-    async () => {
-      const response = await axios.get(endpoint, { timeout: API_TIMEOUT_MS });
+  const totalUsersEndpoint = TOTAL_USERS_ENDPOINT;
 
-      if (!response.data?.success) {
-        return { dau: 0, wau: 0, mau: 0, totalUsers: 0, dauRate: '0%', wauRate: '0%', asOf: null };
-      }
+  const [activeRes, totalUsersRes] = await Promise.allSettled([
+    executeCachedApi(
+      endpoint,
+      {},
+      async () => {
+        const response = await axios.get(endpoint, { timeout: API_TIMEOUT_MS });
+        return response.data?.success ? response.data.data : response.data;
+      },
+      options
+    ),
+    executeCachedApi(
+      totalUsersEndpoint,
+      {},
+      async () => {
+        const response = await axios.get(totalUsersEndpoint, { timeout: API_TIMEOUT_MS });
+        return response.data;
+      },
+      options
+    ),
+  ]);
 
-      return response.data.data;
-    },
-    options
-  ).catch((error) => {
-    console.warn('[Active Users API Warning]', error?.message || error);
-    return { dau: 0, wau: 0, mau: 0, totalUsers: 0, dauRate: '0%', wauRate: '0%', asOf: null };
-  });
+  const activeData = activeRes.status === 'fulfilled' && activeRes.value ? activeRes.value : {};
+  const totalData = totalUsersRes.status === 'fulfilled' && totalUsersRes.value ? totalUsersRes.value : {};
+
+  const totalUsersCount = totalData.totalCount ?? totalData.data?.totalCount ?? activeData.totalUsers ?? 0;
+  const timestampAsOf = totalData.timestamp ?? totalData.data?.timestamp ?? activeData.asOf ?? null;
+
+  return {
+    dau: activeData.dau ?? 0,
+    wau: activeData.wau ?? 0,
+    mau: activeData.mau ?? 0,
+    dauRate: activeData.dauRate ?? '0%',
+    wauRate: activeData.wauRate ?? '0%',
+    totalUsers: totalUsersCount,
+    asOf: timestampAsOf,
+  };
 };
 
 // Daily snapshots of rolling active-user counts. `range` selects which

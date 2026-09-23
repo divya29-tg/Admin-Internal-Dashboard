@@ -13,14 +13,13 @@ import {
   filterByDateMap,
   getCurrentMonth,
   getExactDateRangeForFilter,
-  getLatestTotalUsers,
   getMonthsBetweenDates,
   getTodayDate,
 } from '../utils/dashboardUtils.js';
 import { getCachedApiResponse } from '../utils/cacheService.js';
 import { getPageVisibility, onVisibilityChange } from '../utils/pageVisibility.js';
 import { DEFAULT_FILTER_TYPE, POLL_INTERVAL_MS } from '../constants/dashboard.constants.js';
-import { ACTIVE_USERS_ENDPOINT, DL_TRACKER_BASE_URL, TOTAL_DIDS_ENDPOINT } from '../config/apiConfig.js';
+import { ACTIVE_USERS_ENDPOINT, DL_TRACKER_BASE_URL, TOTAL_DIDS_ENDPOINT, TOTAL_USERS_ENDPOINT } from '../config/apiConfig.js';
 
 /**
  * Helper to match any snapshot item date against targetDateStr (YYYY-MM-DD).
@@ -169,8 +168,6 @@ export const useDashboardData = (token) => {
       };
     }
 
-    const latestTotalUsers = getLatestTotalUsers(activeUsersHistory);
-
     return {
       ...activeUsersBase,
       dau: activeUsersBase.dau || 41,
@@ -178,9 +175,11 @@ export const useDashboardData = (token) => {
       mau: activeUsersBase.mau || 277,
       dauRate: activeUsersBase.dauRate || '1.20%',
       wauRate: activeUsersBase.wauRate || '3.02%',
-      totalUsers: latestTotalUsers ?? activeUsersBase.totalUsers ?? 3409,
+      totalUsers: activeUsersBase.totalUsers ?? 0,
+      asOf: activeUsersBase.asOf ?? null,
       mauSubtitle: 'Users active in the last 30 days',
     };
+
   }, [activeUsersBase, activeUsersHistory, selectedActiveDate]);
 
   /**
@@ -206,8 +205,13 @@ export const useDashboardData = (token) => {
       }
 
       const cachedActiveBase = getCachedApiResponse(ACTIVE_USERS_ENDPOINT, {});
-      if (cachedActiveBase) {
-        setActiveUsersBase(cachedActiveBase);
+      const cachedTotalUsers = getCachedApiResponse(TOTAL_USERS_ENDPOINT, {});
+      if (cachedActiveBase || cachedTotalUsers) {
+        setActiveUsersBase({
+          ...cachedActiveBase,
+          totalUsers: cachedTotalUsers?.totalCount ?? cachedTotalUsers?.data?.totalCount ?? cachedActiveBase?.totalUsers ?? 0,
+          asOf: cachedTotalUsers?.timestamp ?? cachedTotalUsers?.data?.timestamp ?? cachedActiveBase?.asOf ?? null,
+        });
         hasCachedData = true;
       }
 
