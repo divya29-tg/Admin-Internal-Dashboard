@@ -51,7 +51,7 @@ const formatDateLabel = (dateStr) => {
   }
   return dateStr;
 };
-
+ 
 const formatFullDateLabel = (dateStr) => {
   if (!dateStr) return '';
   try {
@@ -70,7 +70,7 @@ const formatFullDateLabel = (dateStr) => {
   }
   return dateStr;
 };
-
+ 
 const formatMonthLabel = (monthStr) => {
   if (!monthStr) return '';
   try {
@@ -87,7 +87,7 @@ const formatMonthLabel = (monthStr) => {
   }
   return monthStr;
 };
-
+ 
 const formatFullMonthYearLabel = (monthStr) => {
   if (!monthStr) return '';
   try {
@@ -117,7 +117,7 @@ const formatFullMonthYearLabel = (monthStr) => {
   }
   return monthStr;
 };
-
+ 
 const isMonday = (dateStr) => {
   if (!dateStr) return false;
   try {
@@ -134,19 +134,19 @@ const isMonday = (dateStr) => {
   }
   return false;
 };
-
+ 
 const getMondaysInMonth = (monthStr, maxDateStr) => {
   if (!monthStr) return [];
   const parts = monthStr.split('-');
   if (parts.length < 2) return [];
-
+ 
   const year = parseInt(parts[0], 10);
   const month = parseInt(parts[1], 10);
   if (isNaN(year) || isNaN(month)) return [];
-
+ 
   const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
   const mondays = [];
-
+ 
   for (let day = 1; day <= daysInMonth; day += 1) {
     const d = new Date(Date.UTC(year, month - 1, day));
     if (d.getUTCDay() === 1) {
@@ -156,21 +156,21 @@ const getMondaysInMonth = (monthStr, maxDateStr) => {
       }
     }
   }
-
+ 
   return mondays;
 };
-
+ 
 const getItemDateStr = (item) => {
   if (!item) return '';
   const rawDate = item.date || item.snapshotDate || item.asOf || item.createdAt || item.timestamp || item.time || '';
   return typeof rawDate === 'string' ? rawDate.split('T')[0] : (rawDate ? String(rawDate) : '');
 };
-
+ 
 const matchesSnapshotDate = (item, targetDateStr) => {
   if (!item || !targetDateStr) return false;
   return getItemDateStr(item) === targetDateStr;
 };
-
+ 
 const extractSnapshotCount = (item, primaryKey) => {
   if (!item) return 0;
   if (primaryKey && item[primaryKey] !== undefined && item[primaryKey] !== null) {
@@ -178,14 +178,14 @@ const extractSnapshotCount = (item, primaryKey) => {
   }
   return item.activeUsers ?? item.count ?? item.activeCount ?? item.total ?? item.value ?? 0;
 };
-
+ 
 const CustomChartTooltip = ({ active, payload, activeConfig }) => {
   if (active && payload && payload.length) {
     const dataPoint = payload[0].payload;
     const color = activeConfig?.color || '#3b82f6';
     const title = activeConfig?.title || 'Active Users';
     const dateLabel = dataPoint.fullDateLabel || dataPoint.displayDate || dataPoint.date;
-
+ 
     return (
       <Box
         sx={{
@@ -215,7 +215,7 @@ const CustomChartTooltip = ({ active, payload, activeConfig }) => {
   }
   return null;
 };
-
+ 
 const DashboardMetricsGrid = ({
   totalDownloads,
   monthlyDownloads,
@@ -224,25 +224,28 @@ const DashboardMetricsGrid = ({
   activeUsersHistory,
   isLoading,
 }) => {
-  const [selectedMetric, setSelectedMetric] = useState('dau'); // 'dau' | 'wau' | 'mau'
+  const [selectedMetric, setSelectedMetric] = useState('dau');
   const [selectedMonth, setSelectedMonth] = useState('');
   const [selectedYear, setSelectedYear] = useState('');
-
+ 
   const containerRef = useRef(null);
-  const [containerWidth, setContainerWidth] = useState(0);
-  const [canScrollLeft, setCanScrollLeft] = useState(false);
-  const [canScrollRight, setCanScrollRight] = useState(false);
-
+  const [scrollState, setScrollState] = useState({
+    isOverflowing: false,
+    canScrollLeft: false,
+    canScrollRight: false,
+  });
+  const { isOverflowing, canScrollLeft, canScrollRight } = scrollState;
+ 
   const { availableMonths, availableYears } = useMemo(() => {
     const monthsSet = new Set();
     const yearsSet = new Set();
-
+ 
     const curMonth = getCurrentMonth();
     const curYear = String(new Date().getFullYear());
-
+ 
     monthsSet.add(curMonth);
     yearsSet.add(curYear);
-
+ 
     const processItem = (item) => {
       const dStr = getItemDateStr(item);
       if (dStr && dStr.length >= 7) {
@@ -252,11 +255,11 @@ const DashboardMetricsGrid = ({
         if (yr <= curYear) yearsSet.add(yr);
       }
     };
-
+ 
     (activeUsersHistory?.daily || []).forEach(processItem);
     (activeUsersHistory?.weekly || []).forEach(processItem);
     (activeUsersHistory?.monthly || []).forEach(processItem);
-
+ 
     const monthsArr = Array.from(monthsSet)
       .sort()
       .reverse()
@@ -264,12 +267,12 @@ const DashboardMetricsGrid = ({
         value: mn,
         label: formatFullMonthYearLabel(mn),
       }));
-
+ 
     const yearsArr = Array.from(yearsSet).sort().reverse();
-
+ 
     return { availableMonths: monthsArr, availableYears: yearsArr };
   }, [activeUsersHistory]);
-
+ 
   useEffect(() => {
     if (!selectedMonth && availableMonths.length > 0) {
       setSelectedMonth(availableMonths[0].value);
@@ -278,7 +281,7 @@ const DashboardMetricsGrid = ({
       setSelectedYear(availableYears[0]);
     }
   }, [availableMonths, availableYears, selectedMonth, selectedYear]);
-
+ 
   const metricConfigs = {
     dau: {
       id: 'dau',
@@ -308,26 +311,26 @@ const DashboardMetricsGrid = ({
       icon: <TrendUpIcon />,
     },
   };
-
+ 
   const activeConfig = metricConfigs[selectedMetric] || metricConfigs.dau;
-
+ 
   const chartData = useMemo(() => {
     const todayStr = getTodayDate();
     const curMonthStr = getCurrentMonth();
     const curYearStr = String(new Date().getFullYear());
-
+ 
     if (selectedMetric === 'dau') {
       const targetMonth = selectedMonth || curMonthStr;
       const rawList = activeUsersHistory?.daily || [];
       if (!Array.isArray(rawList) || rawList.length === 0) return [];
-
+ 
       const items = rawList.filter((item) => {
         const dStr = getItemDateStr(item);
         return dStr && dStr.startsWith(targetMonth) && dStr <= todayStr;
       });
-
+ 
       items.sort((a, b) => getItemDateStr(a).localeCompare(getItemDateStr(b)));
-
+ 
       return items.map((item) => {
         const dStr = getItemDateStr(item);
         const val = extractSnapshotCount(item, 'dau');
@@ -340,21 +343,21 @@ const DashboardMetricsGrid = ({
         };
       });
     }
-
+ 
     if (selectedMetric === 'wau') {
       const targetMonth = selectedMonth || curMonthStr;
       const weeklyList = activeUsersHistory?.weekly || [];
       const dailyList = activeUsersHistory?.daily || [];
-
+ 
       const mondays = getMondaysInMonth(targetMonth, todayStr);
       const result = [];
-
+ 
       mondays.forEach((mondayStr) => {
         let snap = (weeklyList || []).find((item) => matchesSnapshotDate(item, mondayStr));
         if (!snap) {
           snap = (dailyList || []).find((item) => matchesSnapshotDate(item, mondayStr) && isMonday(getItemDateStr(item)));
         }
-
+ 
         if (snap) {
           const val = extractSnapshotCount(snap, 'wau');
           result.push({
@@ -366,18 +369,18 @@ const DashboardMetricsGrid = ({
           });
         }
       });
-
+ 
       result.sort((a, b) => a.date.localeCompare(b.date));
       return result;
     }
-
+ 
     if (selectedMetric === 'mau') {
       const targetYear = selectedYear || curYearStr;
       const monthlyList = activeUsersHistory?.monthly || [];
       const dailyList = activeUsersHistory?.daily || [];
-
+ 
       const monthMap = new Map();
-
+ 
       (monthlyList || []).forEach((item) => {
         const dStr = getItemDateStr(item);
         if (dStr && dStr.startsWith(targetYear) && dStr.slice(0, 7) <= curMonthStr) {
@@ -385,7 +388,7 @@ const DashboardMetricsGrid = ({
           monthMap.set(mKey, item);
         }
       });
-
+ 
       (dailyList || []).forEach((item) => {
         const dStr = getItemDateStr(item);
         if (dStr && dStr.startsWith(targetYear) && dStr.slice(0, 7) <= curMonthStr) {
@@ -395,9 +398,9 @@ const DashboardMetricsGrid = ({
           }
         }
       });
-
+ 
       const sortedMonths = Array.from(monthMap.keys()).sort();
-
+ 
       return sortedMonths.map((mKey) => {
         const item = monthMap.get(mKey);
         const val = extractSnapshotCount(item, 'mau');
@@ -410,96 +413,94 @@ const DashboardMetricsGrid = ({
         };
       });
     }
-
+ 
     return [];
   }, [activeUsersHistory, selectedMetric, selectedMonth, selectedYear]);
+ 
+  // Minimum required chart width derived solely from dataset length and metric spacing
+  const requiredWidth = useMemo(() => {
+    if (!chartData || chartData.length === 0) return 0;
+    const minPointSpacing = selectedMetric === 'dau' ? 50 : selectedMetric === 'wau' ? 90 : 70;
+    return chartData.length * minPointSpacing;
+  }, [chartData, selectedMetric]);
 
-  // ResizeObserver for viewport width measurement
-  useEffect(() => {
-    const elem = containerRef.current;
-    if (!elem) return;
+  // DOM-based scroll and overflow checker
+  const checkScrollState = useCallback(() => {
+    const el = containerRef.current;
+    if (!el) return;
 
-    const observer = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        if (entry.contentRect) {
-          setContainerWidth(entry.contentRect.width);
-        }
+    const overflowing = el.scrollWidth - el.clientWidth > 1;
+    const maxScroll = el.scrollWidth - el.clientWidth;
+    const scrollLeft = el.scrollLeft;
+
+    const left = overflowing && scrollLeft > 2;
+    const right = overflowing && scrollLeft < maxScroll - 2;
+
+    setScrollState((prev) => {
+      if (
+        prev.isOverflowing === overflowing &&
+        prev.canScrollLeft === left &&
+        prev.canScrollRight === right
+      ) {
+        return prev;
       }
+      return {
+        isOverflowing: overflowing,
+        canScrollLeft: left,
+        canScrollRight: right,
+      };
     });
-
-    observer.observe(elem);
-    setContainerWidth(elem.clientWidth);
-
-    return () => observer.disconnect();
   }, []);
 
-  // Compute minimum required width based on observation count
-  const { chartWidth, isOverflowing } = useMemo(() => {
-    if (!chartData || chartData.length === 0) {
-      return { chartWidth: '100%', isOverflowing: false };
-    }
-
-    const minPointSpacing = selectedMetric === 'dau' ? 50 : selectedMetric === 'wau' ? 90 : 70;
-    const requiredWidth = chartData.length * minPointSpacing;
-    const hasOverflow = containerWidth > 0 && requiredWidth > containerWidth;
-
-    return {
-      chartWidth: hasOverflow ? `${requiredWidth}px` : '100%',
-      isOverflowing: hasOverflow,
-    };
-  }, [chartData, containerWidth, selectedMetric]);
-
-  // Scroll button availability check
-  const checkScrollPosition = useCallback(() => {
-    const el = containerRef.current;
-    if (!el || !isOverflowing) {
-      setCanScrollLeft(false);
-      setCanScrollRight(false);
-      return;
-    }
-
-    const scrollLeft = el.scrollLeft;
-    const maxScrollLeft = el.scrollWidth - el.clientWidth;
-
-    setCanScrollLeft(scrollLeft > 2);
-    setCanScrollRight(scrollLeft < maxScrollLeft - 2);
-  }, [isOverflowing]);
-
-  // Handle scroll events
+  // Observe container resize and scroll events for arrow button state
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
 
-    checkScrollPosition();
-    el.addEventListener('scroll', checkScrollPosition, { passive: true });
-    return () => el.removeEventListener('scroll', checkScrollPosition);
-  }, [checkScrollPosition, chartWidth]);
+    checkScrollState();
 
-  // Initial scroll position: automatically scroll to rightmost edge (latest dates)
+    const observer = new ResizeObserver(() => {
+      checkScrollState();
+    });
+    observer.observe(el);
+
+    el.addEventListener('scroll', checkScrollState, { passive: true });
+    return () => {
+      observer.disconnect();
+      el.removeEventListener('scroll', checkScrollState);
+    };
+  }, [checkScrollState]);
+
+  // Auto-scroll to rightmost edge (latest dates) only when dataset or date selection changes
   useEffect(() => {
     const el = containerRef.current;
-    if (el && isOverflowing) {
-      requestAnimationFrame(() => {
-        if (containerRef.current) {
-          containerRef.current.scrollLeft = containerRef.current.scrollWidth - containerRef.current.clientWidth;
-          checkScrollPosition();
-        }
-      });
-    }
-  }, [selectedMetric, selectedMonth, selectedYear, chartData.length, isOverflowing, checkScrollPosition]);
+    if (!el) return;
 
+    const frameId = requestAnimationFrame(() => {
+      if (containerRef.current) {
+        const maxScroll = containerRef.current.scrollWidth - containerRef.current.clientWidth;
+        if (maxScroll > 0) {
+          containerRef.current.scrollLeft = maxScroll;
+        }
+        checkScrollState();
+      }
+    });
+
+    return () => cancelAnimationFrame(frameId);
+  }, [selectedMetric, selectedMonth, selectedYear, chartData, checkScrollState]);
+ 
   const handleScrollLeft = () => {
     if (containerRef.current) {
       containerRef.current.scrollBy({ left: -300, behavior: 'smooth' });
     }
   };
-
+ 
   const handleScrollRight = () => {
     if (containerRef.current) {
       containerRef.current.scrollBy({ left: 300, behavior: 'smooth' });
     }
   };
-
+ 
   return (
     <>
       {/* Top Overview KPI Cards */}
@@ -549,7 +550,7 @@ const DashboardMetricsGrid = ({
           />
         </Grid>
       </Grid>
-
+ 
       {/* Section Header for Active Users with Dynamic Period Selector */}
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={2} px={0.5}>
         <Typography
@@ -564,7 +565,7 @@ const DashboardMetricsGrid = ({
         >
           Active User Metrics
         </Typography>
-
+ 
         <FormControl size="small">
           <Select
             value={
@@ -640,7 +641,7 @@ const DashboardMetricsGrid = ({
           </Select>
         </FormControl>
       </Box>
-
+ 
       {/* Two-Column Layout: Left Vertically Stacked Metric Cards, Right Interactive Chart */}
       <Grid container spacing={3} mb={4} alignItems="stretch">
         {/* Left Column: Stacked Metric Cards (~30% width) */}
@@ -648,7 +649,7 @@ const DashboardMetricsGrid = ({
           <Box display="flex" flexDirection="column" gap={2} height="100%" justifyContent="space-between">
             {Object.values(metricConfigs).map((cfg) => {
               const isSelected = selectedMetric === cfg.id;
-
+ 
               return (
                 <Card
                   key={cfg.id}
@@ -693,7 +694,7 @@ const DashboardMetricsGrid = ({
                       >
                         {cfg.title}
                       </Typography>
-
+ 
                       <Box
                         display="flex"
                         alignItems="center"
@@ -710,7 +711,7 @@ const DashboardMetricsGrid = ({
                         {isSelected ? <ActiveCheckIcon sx={{ fontSize: 16 }} /> : cfg.icon}
                       </Box>
                     </Box>
-
+ 
                     {/* Value & Subtitle */}
                     {isLoading ? (
                       <>
@@ -733,12 +734,13 @@ const DashboardMetricsGrid = ({
             })}
           </Box>
         </Grid>
-
+ 
         {/* Right Column: Interactive Chart Beside Cards (~70% width) */}
-        <Grid item xs={12} md={8} lg={9} sx={{ display: 'flex' }}>
+        <Grid item xs={12} md={8} lg={9} sx={{ display: 'flex', minWidth: 0 }}>
           <Card
             sx={{
               width: '100%',
+              minWidth: 0,
               display: 'flex',
               flexDirection: 'column',
               background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.6) 0%, rgba(30, 41, 59, 0.4) 100%)',
@@ -749,7 +751,7 @@ const DashboardMetricsGrid = ({
               p: 1,
             }}
           >
-            <CardContent sx={{ p: 2.5, flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
+            <CardContent sx={{ p: 2.5, flexGrow: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
               <Box display="flex" alignItems="center" justifyContent="space-between" mb={2}>
                 <Box display="flex" alignItems="center" gap={1.5}>
                   <Box
@@ -832,8 +834,10 @@ const DashboardMetricsGrid = ({
                 flexGrow={1}
                 minHeight={280}
                 width="100%"
+                minWidth={0}
                 sx={{
-                  overflowX: isOverflowing ? 'auto' : 'hidden',
+                  overflowX: 'auto',
+                  touchAction: 'pan-x pan-y',
                   position: 'relative',
                   scrollbarWidth: 'thin',
                   scrollbarColor: 'rgba(59, 130, 246, 0.4) rgba(15, 23, 42, 0.5)',
@@ -867,7 +871,7 @@ const DashboardMetricsGrid = ({
                     </Typography>
                   </Box>
                 ) : (
-                  <Box sx={{ width: chartWidth, height: '100%', minHeight: 280 }}>
+                  <Box sx={{ width: '100%', minWidth: requiredWidth ? `${requiredWidth}px` : 0, height: '100%', minHeight: 280 }}>
                     <ResponsiveContainer width="100%" height="100%">
                       <AreaChart data={chartData} margin={{ top: 10, right: 15, left: -15, bottom: 0 }}>
                         <defs>
@@ -901,6 +905,7 @@ const DashboardMetricsGrid = ({
                           activeDot={{ r: 6, fill: activeConfig.color, stroke: '#ffffff', strokeWidth: 2 }}
                           fillOpacity={1}
                           fill={`url(#activeUsersGrad-${selectedMetric})`}
+                          isAnimationActive={false}
                         />
                       </AreaChart>
                     </ResponsiveContainer>
@@ -914,5 +919,7 @@ const DashboardMetricsGrid = ({
     </>
   );
 };
-
+ 
 export default DashboardMetricsGrid;
+ 
+ 
